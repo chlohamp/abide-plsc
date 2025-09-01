@@ -1,4 +1,0 @@
-src_subject_id,interview_age,site_id_l,demo_sex_v2,demo_prnt_age_v2,demo_prnt_gender_id_v2,demo_prnt_ed_v2_2yr_l,demo_prtnr_ed_v2_2yr_l,demo_comb_income_v2,demo_prnt_income_v2_l,demo_origin_v2,mri_info_manufacturer,rsfmri_meanmotion
-777,178.0,your-moms-house,2.0,45.0,2.0,19.0,23.0,9.0,2.0,189.0,C.hamp,0.07988253
-888,172,your-dads-house,1.0,45.0,2.0,20.0,18.0,2.0,3.0,189.0,C.hamp,0.09071407
-111,178.0,the-dog-house,2.0,45.0,2.0,16.0,17.0,2.0,3.0,189.0,C.hamp,0.07988253
