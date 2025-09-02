@@ -84,11 +84,9 @@ View(Group1.X)
 lm.Group1 <- lm(Group1.Y ~ Group1.X$interview_age +
   as.factor(Group1.X$demo_sex_v2) +
   Group1.X$demo_prnt_age_v2 +
-  as.factor(Group1.X$demo_prnt_gender_id_v2) +
   Group1.X$demo_prnt_ed_v2_2yr_l +
   Group1.X$demo_prtnr_ed_v2_2yr_l +
   Group1.X$demo_comb_income_v2 +
-  as.factor(Group1.X$demo_origin_v2) +
   as.factor(Group1.X$site_id_l) +
   as.factor(Group1.X$mri_info_manufacturer) +
   Group1.X$rsfmri_meanmotion, na.action = na.omit)
@@ -143,11 +141,9 @@ Group2.Y <- as.matrix(socio_df)
 lm.Group2 <- lm(Group2.Y ~ Group1.X$interview_age +
   as.factor(Group1.X$demo_sex_v2) +
   Group1.X$demo_prnt_age_v2 +
-  as.factor(Group1.X$demo_prnt_gender_id_v2) +
   Group1.X$demo_prnt_ed_v2_2yr_l +
   Group1.X$demo_prtnr_ed_v2_2yr_l +
   Group1.X$demo_comb_income_v2 +
-  as.factor(Group1.X$demo_origin_v2) +
   as.factor(Group1.X$site_id_l) +
   as.factor(Group1.X$mri_info_manufacturer) +
   Group1.X$rsfmri_meanmotion, na.action = na.omit)
