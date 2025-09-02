@@ -18,9 +18,8 @@ output_file = 'beta_network_matrix.csv'
 # FETCH YEO 7-NETWORK ATLAS
 # -------------------------------
 print("Loading Yeo 7-network atlas...")
-atlas_yeo = datasets.fetch_atlas_yeo_2011()
-atlas_file = atlas_yeo.thick_7   # 7-network parcellation
-atlas_img = nib.load(atlas_file)
+atlas_yeo = datasets.fetch_atlas_yeo_2011(n_networks=7, thickness='thick')
+atlas_img = nib.load(atlas_yeo.maps)
 atlas_data = atlas_img.get_fdata().astype(int)
 
 # Handle 4D atlas (squeeze out singleton dimension)
@@ -38,19 +37,17 @@ unique_labels = unique_labels[unique_labels != 0]  # exclude background
 print(f"Final atlas shape: {atlas_data.shape}")
 print(f"Atlas unique labels: {unique_labels}")
 
-# Yeo-7 network names (order matches atlas labels 1–7)
-network_names = [
-    "Visual",
-    "Somatomotor", 
-    "DorsalAttention",
-    "VentralAttention",
-    "Limbic",
-    "Frontoparietal",
-    "Default"
-]
+# Get network names automatically from the atlas
+network_names = atlas_yeo.labels
+network_names = network_names[1:]
+
+
+
+
+print(f"Network names: {network_names}")
 
 if len(unique_labels) != len(network_names):
-    raise ValueError(f"Number of atlas labels ({len(unique_labels)}) does not match expected Yeo 7 networks ({len(network_names)}).")
+    raise ValueError(f"Number of atlas labels ({len(unique_labels)}) does not match number of network names ({len(network_names)}).")
 
 # -------------------------------
 # FIND SUBJECT FILES
@@ -80,7 +77,7 @@ for i, conn_file in enumerate(conn_files):
     # Extract subject ID
     match = re.search(r'(sub-[^_]+)', filename)
     if not match:
-        print(f"  ❌ Cannot extract subject ID from filename, skipping.")
+        print(f" Cannot extract subject ID from filename, skipping.")
         failed_subjects.append(filename)
         continue
     subject_id = match.group(1)
@@ -99,27 +96,27 @@ for i, conn_file in enumerate(conn_files):
         nan_count = np.sum(np.isnan(conn_data))
         inf_count = np.sum(np.isinf(conn_data))
         if nan_count > 0 or inf_count > 0:
-            print(f"  ⚠️  WARNING: Found {nan_count} NaN and {inf_count} inf values")
+            print(f"WARNING: Found {nan_count} NaN and {inf_count} inf values")
 
         # Handle 4D images (common with singleton 4th dimension)
         if conn_data.ndim == 4:
-            print(f"  📦 4D image detected, shape: {conn_data.shape}")
+            print(f"4D image detected, shape: {conn_data.shape}")
             if conn_data.shape[3] == 1:
                 # Squeeze out singleton dimension
                 conn_data = np.squeeze(conn_data, axis=3)
-                print(f"  ✅ Squeezed to 3D: {conn_data.shape}")
+                print(f"Squeezed to 3D: {conn_data.shape}")
             else:
-                print(f"  ❌ ERROR: 4D image has {conn_data.shape[3]} volumes, expected 1. Skipping...")
+                print(f"ERROR: 4D image has {conn_data.shape[3]} volumes, expected 1. Skipping...")
                 failed_subjects.append(filename)
                 continue
         elif conn_data.ndim != 3:
-            print(f"  ❌ ERROR: Expected 3D map, got {conn_data.ndim}D shape {conn_data.shape}, skipping...")
+            print(f"ERROR: Expected 3D map, got {conn_data.ndim}D shape {conn_data.shape}, skipping...")
             failed_subjects.append(filename)
             continue
 
         # Check if dimensions match atlas (both should now be 3D)
         if conn_data.shape != atlas_data.shape:
-            print(f"  ⚠️  WARNING: Data shape {conn_data.shape} != atlas shape {atlas_data.shape}")
+            print(f" WARNING: Data shape {conn_data.shape} != atlas shape {atlas_data.shape}")
             print("  Attempting to resample data to match atlas...")
             
             try:
@@ -127,9 +124,9 @@ for i, conn_file in enumerate(conn_files):
                 atlas_img_3d = nib.Nifti1Image(atlas_data, atlas_img.affine, atlas_img.header)
                 conn_img_resampled = resample_to_img(conn_img, atlas_img_3d, interpolation='linear')
                 conn_data = conn_img_resampled.get_fdata()
-                print(f"  ✅ Resampled to shape: {conn_data.shape}")
+                print(f"Resampled to shape: {conn_data.shape}")
             except Exception as e:
-                print(f"  ❌ ERROR: Failed to resample: {e}")
+                print(f"ERROR: Failed to resample: {e}")
                 failed_subjects.append(filename)
                 continue
 
@@ -158,10 +155,10 @@ for i, conn_file in enumerate(conn_files):
             print(f"    Network {network_names[j]} (label {label}): {voxel_count} voxels, mean = {mean_beta:.6f}")
 
         all_subjects_data.append([subject_id] + network_betas)
-        print(f"  ✅ Successfully processed {subject_id}")
+        print(f"Successfully processed {subject_id}")
         
     except Exception as e:
-        print(f"  ❌ ERROR processing {filename}: {e}")
+        print(f"ERROR processing {filename}: {e}")
         failed_subjects.append(filename)
         continue
 
@@ -169,35 +166,22 @@ for i, conn_file in enumerate(conn_files):
 # SAVE GROUP CSV
 # -------------------------------
 if len(all_subjects_data) == 0:
-    print("\n❌ ERROR: No subjects were successfully processed!")
+    print("ERROR: No subjects were successfully processed!")
     exit(1)
 
 columns = ["subject_id"] + network_names
 df = pd.DataFrame(all_subjects_data, columns=columns)
 
-print(f"\n📊 SUMMARY:")
+print(f"SUMMARY:")
 print(f"  Successfully processed: {len(all_subjects_data)} subjects")
 print(f"  Failed: {len(failed_subjects)} subjects")
 if failed_subjects:
     print(f"  Failed files: {failed_subjects}")
 
-print(f"\n📋 Data preview:")
+print(f"Data preview:")
 print(df.head())
-print(f"\n📊 Data statistics:")
-print(df.describe())
+
 
 # Save to CSV
 df.to_csv(output_file, index=False)
-print(f"\n✅ Saved group beta matrix: {output_file}")
-
-# Additional validation
-print(f"\n🔍 VALIDATION:")
-print(f"  Output file size: {os.path.getsize(output_file)} bytes")
-print(f"  CSV shape: {df.shape}")
-
-# Check for any completely missing networks
-for col in network_names:
-    missing_count = df[col].isna().sum()
-    if missing_count > 0:
-        print(f"  ⚠️  {col}: {missing_count}/{len(df)} subjects have missing values")
-
+print(f"Saved group beta matrix: {output_file}")
