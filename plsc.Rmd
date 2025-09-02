@@ -22,39 +22,73 @@ rm(list = ls()) # Clear environment
 graphics.off() # Clear all plots
 
 # Load necessary libraries
-library(tidyverse) # Core tidyverse packages
-library(ExPosition) # Multivariate data analysis
-library(TExPosition) # Tensor-based ExPosition analysis
+library(tidyverse)      # Core tidyverse packages
+library(ExPosition)     # Multivariate data analysis
+library(TExPosition)    # Tensor-based ExPosition analysis
 # library(TInPosition)  # Uncomment if needed and installed
-library(PTCA4CATA) # Permutation Tests for CATA
-library(data4PCCAR) # Example datasets for PCA
-library(plyr) # Data manipulation (load first to avoid conflicts)
-library(dplyr) # Data manipulation
-library(corrplot) # Correlation plots
-library(ggplot2) # Data visualization
-library(cowplot) # Plot arrangement
-library(readr) # Reading data files
-library(gridExtra) # Arrange grid-based visualizations
-library(grid) # Low-level graphics system
-library(here) # Relative file paths
-library(psych) # Psychometric tools
+library(PTCA4CATA)      # Permutation Tests for CATA
+library(data4PCCAR)     # Example datasetsfor PCA
+library(plyr)           # Data manipulation (load first to avoid conflicts)
+library(dplyr)          # Data manipulation
+library(corrplot)       # Correlation plots
+library(ggplot2)        # Data visualization
+library(cowplot)        # Plot arrangement
+library(readr)          # Reading data files
+library(gridExtra)      # Arrange grid-based visualizations
+library(grid)           # Low-level graphics system
+library(here)           # Relative file paths
+library(psych)          # Psychometric tools
 library(car)
 library(kableExtra)
+library(patchwork)
+library(rlang)
 ```
+
+## Figure theme
+
+A responsive custom theme for making figures
+
+```{r}
+custom_theme <- function(base_size = 14, base_family = "") {
+  theme_classic(base_size = base_size, base_family = base_family) +
+    theme(
+      # Titles
+      plot.title = element_text(size = base_size * 1.4, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = base_size * 1.1, hjust = 0.5),
+      plot.caption = element_text(size = base_size * 0.9, hjust = 1),
+
+      # Axes
+      axis.title = element_text(size = base_size * 1.2),
+      axis.title.x = element_text(margin = margin(t = 10)),
+      axis.title.y = element_text(margin = margin(r = 10)),
+      axis.text = element_text(size = base_size),
+
+      # Legend
+      legend.title = element_text(size = base_size * 1.1, face = "bold"),
+      legend.text = element_text(size = base_size),
+      legend.key.size = unit(1.2, "lines"),
+
+      # Facets
+      strip.text = element_text(size = base_size * 1.1, face = "bold"),
+    )
+}
+```
+
 
 
 **Data :**  cleaned data, pre processed and grouped into two different datasets - one for RSI measures and other for sociocultural measures from ABCD data.
 
 ```{r}
+PATH = "C:/_ALEX_/_RESEARCH/_workshops/BrainHack2025/abide-plsc"
+
 # load datasets
-covar_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/covariate.csv")
-socio_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/sociocult.csv")
-rsfc_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/rsfc.csv")
-# phy_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/phyhealth.csv")
+covar_df <- read_csv(sprintf("%s/derivatives/gn-reduced/simulated_covariate.csv", PATH))
+socio_df <- read_csv(sprintf("%s/derivatives/gn-reduced/simulated_sociocult.csv", PATH))
+rsfc_df <- read_csv(sprintf("%s/derivatives/gn-reduced/simulated_rsfc.csv", PATH))
+# phy_df <- read_csv(sprintf("%s/derivatives/phyhealth.csv", PATH))
 
-fig_dir <- "/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/figures/"
-out_dir <- "/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced"
-
+fig_dir <- sprintf("%s/derivatives/gn-reduced/figures/", PATH)
+out_dir <- sprintf("%s/derivatives/gn-reduced/", PATH)
 
 ```
 
@@ -84,11 +118,11 @@ View(Group1.X)
 lm.Group1 <- lm(Group1.Y ~ Group1.X$interview_age +
   as.factor(Group1.X$demo_sex_v2) +
   Group1.X$demo_prnt_age_v2 +
-  as.factor(Group1.X$demo_prnt_gender_id_v2) +
+  #as.factor(Group1.X$demo_prnt_gender_id_v2) +
   Group1.X$demo_prnt_ed_v2_2yr_l +
   Group1.X$demo_prtnr_ed_v2_2yr_l +
   Group1.X$demo_comb_income_v2 +
-  as.factor(Group1.X$demo_origin_v2) +
+  #as.factor(Group1.X$demo_origin_v2) +
   as.factor(Group1.X$site_id_l) +
   as.factor(Group1.X$mri_info_manufacturer) +
   Group1.X$rsfmri_meanmotion, na.action = na.omit)
@@ -101,36 +135,75 @@ Group1_residuals <- data.frame()
 Group1_residuals <- as.data.frame(lm.Group1$residuals)
 ```
 
+
+```{r}
+Group1.X %>%
+  select(where(is.double)) %>%
+  imap(~ ggplot(Group1.X, aes(x = .data[[.y]])) +
+         geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+         custom_theme() +
+         labs(title = .y, x = NULL, y = NULL))
+
+```
+
+
 #### Measure goodness of fit
 
-```{r echo=TRUE}
-fit_resi <- paste0(fig_dir, "resi-fit_rsfc.png") # Correct file path with slash
+```{r fig.width=12, fig.height=3, dpi=150, message=FALSE, warning=FALSE}
+fit_resi <- file.path(fig_dir, "resi-fit_rsfc.png")
 
-# Open the PNG device to save the plots
-png(fit_resi, height = 600, width = 1800) # Set dimensions in pixels
+# --- Data prep (safe names + numeric vectors) ---
+resid_vec <- as.numeric(Group1_residuals[, 1])
+f1 <- as.numeric(fitted(lm.Group1))
+r1 <- as.numeric(residuals(lm.Group1))
 
-# Set up a 3x2 grid layout (3 rows, 2 columns)
-par(mfrow = c(1, 3))
+resid_df <- data.frame(resid = resid_vec)
+fit_df   <- data.frame(fitted = f1, resid = r1)
 
-# Q-Q plot for residuals
-qqnorm(Group1_residuals[, 1], main = "Q-Q plot for RSFC residuals")
-qqline(Group1_residuals[, 1])
+# --- Plots ---
+# (1) Q–Q plot — lavender
+p1 <- ggplot(resid_df, aes(sample = .data$resid)) +
+  stat_qq(color = "midnightblue") +
+  stat_qq_line(color = "midnightblue") +
+  labs(
+    title = "Q–Q plot for RSFC residuals",
+    x = "Theoretical Quantiles", y = "Sample Quantiles"
+  ) +
+  custom_theme(12)
 
-# Histogram of residuals (using base hist function)
-hist(Group1_residuals[, 1], main = "Histogram of RSFC residuals", xlab = "Residuals", col = "lightblue")
+# (2) Histogram — pink
+p2 <- ggplot(resid_df, aes(x = .data$resid)) +
+  geom_histogram(bins = 30, fill = "lavender") +
+  labs(
+    title = "Histogram of RSFC residuals",
+    x = "Residuals", y = "Count"
+  ) +
+  custom_theme(12)
 
-# Evaluation by prediction
-f1 <- fitted(lm.Group1)
-r1 <- residuals(lm.Group1)
+# (3) Fitted vs Residuals — blue
+p3 <- ggplot(fit_df, aes(x = .data$fitted, y = .data$resid)) +
+  geom_point(alpha = 0.6, color = "pink") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Fitted vs. RSFC residuals",
+    x = "Fitted values", y = "Residuals"
+  ) +
+  custom_theme(12)
 
-# Fitted vs residual plot
-plot(f1, r1, main = "Fitted vs. RSFC Residuals")
+# Combine (1 row x 3 columns) and show inline
+combined <- p1 | p2 | p3
 
-# Reset plotting layout (optional)
-par(mfrow = c(1, 1))
+# Save the same combined plot as PNG at 300 dpi
+ggsave(
+  filename = fit_resi,
+  plot = combined,
+  width = 12, height = 4, units = "in", dpi = 300
+)
 
-# Close the PNG device to save the plot
-dev.off()
+#RmD
+combined
+
+
 ```
 
 
@@ -143,19 +216,16 @@ Group2.Y <- as.matrix(socio_df)
 lm.Group2 <- lm(Group2.Y ~ Group1.X$interview_age +
   as.factor(Group1.X$demo_sex_v2) +
   Group1.X$demo_prnt_age_v2 +
-  as.factor(Group1.X$demo_prnt_gender_id_v2) +
+  #as.factor(Group1.X$demo_prnt_gender_id_v2) +
   Group1.X$demo_prnt_ed_v2_2yr_l +
   Group1.X$demo_prtnr_ed_v2_2yr_l +
   Group1.X$demo_comb_income_v2 +
-  as.factor(Group1.X$demo_origin_v2) +
+  #as.factor(Group1.X$demo_origin_v2) +
   as.factor(Group1.X$site_id_l) +
   as.factor(Group1.X$mri_info_manufacturer) +
   Group1.X$rsfmri_meanmotion, na.action = na.omit)
 
-# keep if we decide this is how we want to deal with missing data #,na.action = na.omit)
-# Run VIF to check for multicollinearity
-summary(lm.Group2)
-
+# RESIDUALS
 Group2_residuals <- data.frame()
 Group2_residuals <- as.data.frame(lm.Group2$residuals)
 
@@ -163,86 +233,130 @@ Group2_residuals <- as.data.frame(lm.Group2$residuals)
 #### Measure goodness of fit
 
 
-```{r echo=TRUE}
-fit_resi <- paste0(fig_dir, "resi-fit_socio.png") # Correct file path with slash
+```{r fig.width=12, fig.height=4, dpi=150, message=FALSE, warning=FALSE}
 
-# Open the PNG device to save the plots
-png(fit_resi, height = 600, width = 1800) # Set dimensions in pixels
+# =========================
+# 1) Combined 1×3 (Group2)
+# =========================
+fit_resi_soc <- file.path(fig_dir, "resi-fit_socio.png")
 
-# Set up a 1x3 grid
-par(mfrow = c(1, 3))
+resid_vec2 <- as.numeric(Group2_residuals[, 1])
+f2 <- as.numeric(fitted(lm.Group2))
+r2 <- as.numeric(residuals(lm.Group2))
 
-# Q-Q plot for residuals
-qqnorm(Group2_residuals[, 1], main = "Q-Q plot for Sociocultural residuals")
-qqline(Group2_residuals[, 1])
+resid_df2 <- data.frame(resid = resid_vec2)
+fit_df2   <- data.frame(fitted = f2, resid = r2)
 
-# Histogram of residuals (using base hist function)
-hist(Group2_residuals[, 1], main = "Histogram of Sociocultural residuals", xlab = "Residuals", col = "lightblue")
+# (1) Q–Q — midnightblue
+p1 <- ggplot(resid_df2, aes(sample = .data$resid)) +
+  stat_qq(color = "midnightblue") +
+  stat_qq_line(color = "midnightblue") +
+  labs(
+    title = "Q–Q plot for Sociocultural residuals",
+    x = "Theoretical Quantiles", y = "Sample Quantiles"
+  ) +
+  custom_theme(12)
 
-# Evaluation by prediction
-f2 <- fitted(lm.Group2)
-r2 <- residuals(lm.Group2)
+# (2) Histogram — lavender
+p2 <- ggplot(resid_df2, aes(x = .data$resid)) +
+  geom_histogram(bins = 30, fill = "lavender") +
+  labs(
+    title = "Histogram of Sociocultural residuals",
+    x = "Residuals", y = "Count"
+  ) +
+  custom_theme(12)
 
-# Fitted vs residual plot
-plot(f2, r2, main = "Fitted vs. Sociocultural Residuals")
+# (3) Fitted vs Residuals — pink
+p3 <- ggplot(fit_df2, aes(x = .data$fitted, y = .data$resid)) +
+  geom_point(alpha = 0.6, color = "pink") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Fitted vs. Sociocultural residuals",
+    x = "Fitted values", y = "Residuals"
+  ) +
+  custom_theme(12)
 
-# Reset plotting layout (optional)
-par(mfrow = c(1, 1))
+combined_soc <- p1 | p2 | p3
 
-# Close the PNG device to save the plot
-dev.off()
-```
 
-```{r}
-# Define the file path to save the Q-Q plot PNG
-fit_resi <- paste0(fig_dir, "qq-plots_residuals.png") # Correct file path with slash
+# Save 1×3 panel
+ggsave(
+  filename = fit_resi_soc,
+  plot = combined_soc,
+  width = 12, height = 4, units = "in", dpi = 300
+)
 
-# Open the PNG device to save the plots
-png(fit_resi, height = 800, width = 1200) # Set dimensions in pixels
+# ==========================================
+# 2) Q–Q grid for ALL Group2 residual cols
+# ==========================================
+qq_png <- file.path(fig_dir, "qq-plots_residuals.png")
 
-# Set up the grid to display Q-Q plots in 2 rows
-par(mfrow = c(3, ceiling(ncol(Group2_residuals) / 3))) # 2 rows and adjust number of columns based on residuals
-
-# Loop through each column in Group2_residuals to create Q-Q plots
-for (i in 1:ncol(Group2_residuals)) {
-  # Q-Q plot for residuals
-  qqnorm(Group2_residuals[, i], main = paste0("Q-Q plot for ", colnames(Group2_residuals)[i]))
-  qqline(Group2_residuals[, i]) # Add the Q-Q line
+resid_mat <- as.data.frame(Group2_residuals)
+if (is.null(colnames(resid_mat))) {
+  colnames(resid_mat) <- paste0("col", seq_len(ncol(resid_mat)))
 }
 
-# Reset plotting layout (optional)
-par(mfrow = c(1, 1))
+qq_list <- lapply(colnames(resid_mat), function(nm) {
+  ggplot(data.frame(resid = as.numeric(resid_mat[[nm]])), aes(sample = .data$resid)) +
+    stat_qq(color = "midnightblue") +
+    stat_qq_line(color = "midnightblue") +
+    labs(title = paste0("Q–Q: ", nm), x = "Theoretical", y = "Sample") +
+    custom_theme(4)
+})
 
-# Close the PNG device to save the plot
-dev.off()
+ncol_grid <- 5
+nrow_grid <- ceiling(length(qq_list) / ncol_grid)
 
-```
+qq_grid <- wrap_plots(qq_list, ncol = ncol_grid)
 
-```{r}
-# Define the file path to save the scatter plot PNG
-fit_resi <- paste0(fig_dir, "scatter-plots_residuals.png") # Correct file path with slash
+# Save Q–Q grid
+ggsave(
+  filename = qq_png,
+  plot = qq_grid,
+  width = 12, height = 2 * nrow_grid, units = "in", dpi = 300
+)
 
-# Open the PNG device to save the plots
-png(fit_resi, height = 800, width = 1200) # Set dimensions in pixels
+# ==================================================
+# 3) Scatter (residuals vs. index) for ALL columns
+# ==================================================
+scatter_png <- file.path(fig_dir, "scatter-plots_residuals.png")
 
-# Set up the grid to display scatter plots in 2 rows
-par(mfrow = c(3, ceiling(ncol(Group2_residuals) / 3))) # 2 rows and adjust number of columns based on residuals
-
-# Loop through each column in Group2_residuals to create scatter plots
-for (i in 1:ncol(Group2_residuals)) {
-  # Scatter plot for residuals vs index (or fitted values, or another variable)
-  plot(Group2_residuals[, i],
-    main = paste0("Scatter plot for ", colnames(Group2_residuals)[i]),
-    xlab = "Index", ylab = "Residuals",
-    pch = 19, col = "blue"
+scatter_list <- lapply(colnames(resid_mat), function(nm) {
+  df <- data.frame(
+    idx   = seq_along(resid_mat[[nm]]),
+    resid = as.numeric(resid_mat[[nm]])
   )
-}
+  ggplot(df, aes(x = .data$idx, y = .data$resid)) +
+    geom_point(alpha = 0.6, color = "pink") +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(title = paste0("Residuals: ", nm), x = "Index", y = "Residuals") +
+    custom_theme(5)
+})
 
-# Reset plotting layout (optional)
-par(mfrow = c(1, 1))
+scatter_grid <- wrap_plots(scatter_list, ncol = ncol_grid)
 
-# Close the PNG device to save the plot
-dev.off()
+# Save scatter grid
+ggsave(
+  filename = scatter_png,
+  plot = scatter_grid,
+  width = 12, height = 2 * nrow_grid, units = "in", dpi = 300
+)
+
+```
+##### Show plots in-line
+
+```{r}
+
+# Group2 diagnostics
+combined_soc
+
+# Q-Q plots per variable
+qq_grid
+
+# Scatter plots per variable
+scatter_grid
+
+
 ```
 
 
