@@ -4,7 +4,7 @@ This repo contains the scripts used to run a partial least squares correlation (
 
 ## Scripts
 - `plsc.Rmd`: main PLSC analysis script
-- `beta.ipynb`: extracts the correlation coefficients using the Yeo atlas
+- `beta.py`: extracts the correlation coefficients using the Yeo atlas
 - `plsc-ppt.ipynb`: determines the number of participants that have phenotypic data
 
 ## Simulated Data
