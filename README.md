@@ -1,6 +1,6 @@
 # ABIDE PLSC Analysis
 
-This repo contains the scripts used to run a partial least squares correlation (PLSC) analysis in the Autism Brain Imaging Data Exchange (ABIDE). 
+This repo contains the scripts used to run a partial least squares correlation (PLSC) analysis in the Autism Brain Imaging Data Exchange (ABIDE). This project was concieved at the 2025 Flux BrainHack. For more information regarding the team who worked on the project, please see [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 ## Scripts
 - `plsc.Rmd`: main PLSC analysis script
