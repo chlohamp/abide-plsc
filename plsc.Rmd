@@ -16,90 +16,93 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Import Libraries
+## 1. Intallment and loading of packages
 ```{r}
-rm(list = ls()) # Clear environment
-graphics.off() # Clear all plots
+# Utility functions for package management
+install_cran_if_missing <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    message(sprintf("Installing CRAN package: %s", pkg))
+    install.packages(pkg)
+  }
+}
 
-# Load necessary libraries
-library(tidyverse) # Core tidyverse packages
-library(ExPosition) # Multivariate data analysis
-library(TExPosition) # Tensor-based ExPosition analysis
-# library(TInPosition)  # Uncomment if needed and installed
-library(PTCA4CATA) # Permutation Tests for CATA
-library(data4PCCAR) # Example datasets for PCA
-library(plyr) # Data manipulation (load first to avoid conflicts)
-library(dplyr) # Data manipulation
-library(corrplot) # Correlation plots
-library(ggplot2) # Data visualization
-library(cowplot) # Plot arrangement
-library(readr) # Reading data files
-library(gridExtra) # Arrange grid-based visualizations
-library(grid) # Low-level graphics system
-library(here) # Relative file paths
-library(psych) # Psychometric tools
-library(car)
-library(kableExtra)
+install_github_if_missing <- function(pkg, repo) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    if (!requireNamespace("devtools", quietly = TRUE)) {
+      install.packages("devtools")
+    }
+    message(sprintf("Installing GitHub package: %s from %s", pkg, repo))
+    devtools::install_github(repo)
+  }
+}
+
+# -
+# Load Packages
+
+cran_packages <- c(
+  "tidyverse", "dplyr", "readr", "here", 
+  "ggplot2", "cowplot", "corrplot", "gridExtra", "grid","reshape2",
+  "ExPosition", "TExPosition", "psych", "car", "kableExtra"
+)
+
+github_packages <- c("PTCA4CATA", "data4PCCAR")
+github_repos <- c("HerveAbdi/PTCA4CATA", "HerveAbdi/data4PCCAR")
+
+# Install & load
+invisible(lapply(cran_packages, install_cran_if_missing))
+invisible(mapply(install_github_if_missing, github_packages, github_repos))
+invisible(lapply(c(cran_packages, github_packages), library, character.only = TRUE))
+
 ```
 
 
 **Data :**  cleaned data, pre processed and grouped into two different datasets - one for RSI measures and other for sociocultural measures from ABCD data.
 
-```{r}
-# load datasets
-covar_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/covariate.csv")
-socio_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/sociocult.csv")
-rsfc_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/rsfc.csv")
-# phy_df <- read_csv("/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/phyhealth.csv")
 
-fig_dir <- "/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced/figures/"
-out_dir <- "/Users/chloehampson/Desktop/projects/abcd-plsc/derivatives/gn-reduced"
+## 2. Directories & Data
+```{r}
+
+
+proj_dir <- here::here()
+fig_dir <- file.path(proj_dir, "derivatives/gn-reduced/figures")
+out_dir <- file.path(proj_dir, "derivatives/gn-reduced")
+
+covar_df <- read_csv("D:/Hunor/phd_project/Brain_hack/abide-plsc/simulated_covariate.csv")
+socio_df <- read_csv("D:/Hunor/phd_project/Brain_hack/abide-plsc/simulated_sociocult.csv")
+rsfc_df  <- read_csv("D:/Hunor/phd_project/Brain_hack/abide-plsc/simulated_rsfc.csv")
 
 
 ```
 
-## Performing residualization 
-
-###  MLRM for resting-state data
-
+# 3. Residualization of data
 ```{r}
-## resting state variables and covariates
-# dependent variables
-Group1.Y <- as.matrix(rsfc_df)
-View(Group1.Y)
 
-# independent variables/covariates
-Group1.X <- covar_df
-View(Group1.X)
+# function for residualization
+run_residualization <- function(y, covar_df) {
+  lm_fit <- lm(
+    y ~ interview_age +
+      as.factor(demo_sex_v2) +
+      demo_prnt_age_v2 +
+   #   as.factor(demo_prnt_gender_id_v2) +
+      demo_prnt_ed_v2_2yr_l +
+      demo_prtnr_ed_v2_2yr_l +
+      demo_comb_income_v2 +
+    #  as.factor(demo_origin_v2) +
+      as.factor(site_id_l) +
+      as.factor(mri_info_manufacturer) +
+      rsfmri_meanmotion,
+    data = covar_df,
+    na.action = na.omit
+  )
+  return(as.data.frame(residuals(lm_fit)))
+}
+
+#rezidualization of data
+Group1_residuals <- run_residualization(as.matrix(rsfc_df), covar_df)
+Group2_residuals <- run_residualization(as.matrix(socio_df), covar_df)
 ```
 
-### note:
-# 1) check all variables- continous/factor
-# 2) run str()
-# 3) check for normality, homoscedascity,linearity,collinearity
 
-
-```{r}
-# Multiple regression model
-lm.Group1 <- lm(Group1.Y ~ Group1.X$interview_age +
-  as.factor(Group1.X$demo_sex_v2) +
-  Group1.X$demo_prnt_age_v2 +
-  as.factor(Group1.X$demo_prnt_gender_id_v2) +
-  Group1.X$demo_prnt_ed_v2_2yr_l +
-  Group1.X$demo_prtnr_ed_v2_2yr_l +
-  Group1.X$demo_comb_income_v2 +
-  as.factor(Group1.X$demo_origin_v2) +
-  as.factor(Group1.X$site_id_l) +
-  as.factor(Group1.X$mri_info_manufacturer) +
-  Group1.X$rsfmri_meanmotion, na.action = na.omit)
-
-
-# R.square -> how well the model explains the variation in the data which is not random
-# Theorotical model performace is defined as R square
-
-Group1_residuals <- data.frame()
-Group1_residuals <- as.data.frame(lm.Group1$residuals)
-```
 
 #### Measure goodness of fit
 
@@ -134,32 +137,6 @@ dev.off()
 ```
 
 
-### MLRM for sociocultural data
-
-```{r echo=TRUE}
-Group2.Y <- as.matrix(socio_df)
-
-
-lm.Group2 <- lm(Group2.Y ~ Group1.X$interview_age +
-  as.factor(Group1.X$demo_sex_v2) +
-  Group1.X$demo_prnt_age_v2 +
-  as.factor(Group1.X$demo_prnt_gender_id_v2) +
-  Group1.X$demo_prnt_ed_v2_2yr_l +
-  Group1.X$demo_prtnr_ed_v2_2yr_l +
-  Group1.X$demo_comb_income_v2 +
-  as.factor(Group1.X$demo_origin_v2) +
-  as.factor(Group1.X$site_id_l) +
-  as.factor(Group1.X$mri_info_manufacturer) +
-  Group1.X$rsfmri_meanmotion, na.action = na.omit)
-
-# keep if we decide this is how we want to deal with missing data #,na.action = na.omit)
-# Run VIF to check for multicollinearity
-summary(lm.Group2)
-
-Group2_residuals <- data.frame()
-Group2_residuals <- as.data.frame(lm.Group2$residuals)
-
-```
 #### Measure goodness of fit
 
 
@@ -246,75 +223,374 @@ dev.off()
 ```
 
 
-## PLSC Analysis
+## 5. PLSC Analysis
 
-### 1. Correlation plots
 
 ```{r}
-# Input data for PLSC
-data1 <- as.data.frame(Group1_residuals)
-data2 <- as.data.frame(Group2_residuals)
+# 1. Run PLSC Analysis
+# Re-define the lm function to get a complete lm object for later use
+run_residualization_lm <- function(y, covar_df) {
+  lm_fit <- lm(
+    y ~ interview_age +
+      as.factor(demo_sex_v2) +
+      demo_prnt_age_v2 +
+      demo_prnt_ed_v2_2yr_l +
+      demo_prtnr_ed_v2_2yr_l +
+      demo_comb_income_v2 +
+      as.factor(site_id_l) +
+      as.factor(mri_info_manufacturer) +
+      rsfmri_meanmotion,
+    data = covar_df,
+    na.action = na.omit
+  )
+  return(lm_fit)
+}
 
+lm.Group1 <- run_residualization_lm(as.matrix(rsfc_df), covar_df)
+lm.Group2 <- run_residualization_lm(as.matrix(socio_df), covar_df)
+data1 <- as.data.frame(residuals(lm.Group1))
+data2 <- as.data.frame(residuals(lm.Group2))
 
-# Compute the covariance matrix
+# Create a design matrix for the PLSC analysis
+design_matrix <- as.matrix(as.factor(covar_df$site_id_l))
+rownames(design_matrix) <- covar_df$src_subject_id
 
+# Run the core PLSC analysis
+pls.res <- tepPLS(
+  data1, data2,
+  DESIGN = design_matrix,
+  make_design_nominal = TRUE,
+  graphs = FALSE # Set graphs to FALSE to create custom plots
+)
+summary(pls.res)
+```
+```{r}
+# 2. Correlation Plot
+# Create the correlation matrix
 XY.cor.pearson <- cor(data2, data1)
 
-# Save the plot as a PNG file with higher resolution
-corr <- paste0(fig_dir, "correlation_plot.png")
+# Reshape the correlation matrix for ggplot
+cor_df <- reshape2::melt(XY.cor.pearson)
 
+# Create the ggplot heatmap
+cor_plot <- ggplot(cor_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "darkred", mid = "white", high = "midnightblue",
+    midpoint = 0, limits = c(-0.25, 0.25)
+  ) +
+  labs(title = "Pearson Correlation Matrix", x = "RSFC Measures", y = "Sociocultural Measures", fill = "Correlation") +
+  theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "bottom"
+  )
 
-# Create the plot
-png(corr, width = 1200, height = 800, res = 300) # Increase res to 300 dpi
+# Save the plot
+ggsave(file.path(fig_dir, "correlation_plot.png"), plot = cor_plot, width = 10, height = 8, dpi = 300)
 
-
-
-# for full
-corrplot(XY.cor.pearson,
-  is.corr = FALSE, # Treat as raw data
-  method = "color",
-  col.lim = c(-0.25, 0.25), # Set color limits
-  tl.cex = 0.2, tl.col = "black", # Smaller text labels
-  cl.pos = "b", cl.cex = 0.3, # Smaller legend text
-  title = "Pearson Correlation",
-  cex.main = 0.8, # Adjust title text size
-  mar = c(0, 0, 1, 0), # Smaller margins
-  lwd = 0.1, # Thinner lines
-  col = colorRampPalette(c("darkred", "white", "midnightblue"))(6)
-)
-dev.off() # Close the device
-
+# Display the plot in the R Markdown output
+knitr::include_graphics(file.path(fig_dir, "correlation_plot.png"))
 ```
 
-# for reduced
-"""corrplot(XY.cor.pearson,
-  is.corr = FALSE, # Treat as raw data
-  method = "color",
-  col.lim = c(-0.2, 0.2), # Set color limits
-  tl.cex = 0.2, tl.col = "black", # Smaller text labels
-  addCoef.col = "black", number.digits = 3, number.cex = 0.17, # Smaller numbers
-  cl.pos = "b", cl.cex = 0.3, # Smaller legend text
-  title = "Pearson Correlation",
-  cex.main = 0.8, # Adjust title text size
-  mar = c(0, 0, 1, 0), # Smaller margins
-  addCoefasPercent = FALSE, lwd = 0.1, # Thinner lines
-  col = colorRampPalette(c("darkred", "white", "midnightblue"))(6)
-)""" # Close the device
-
-### 2. Package details
 
 ```{r}
-tepPLS(data1, data2,
-  center1 = TRUE,
-  scale1 = "SS1",
-  center2 = TRUE,
-  scale2 = "SS1",
-  DESIGN = NULL,
-  make_design_nominal = TRUE,
-  graphs = TRUE,
-  k = 0
+# 3. Permutation Test and Scree Plot
+# Run permutation test to find significant dimensions
+resPerm4PLSC <- perm4PLSC(data1, data2, permType = "byColumns", nIter = 10000)
+
+# Create a data frame for the scree plot
+scree_df <- data.frame(
+  Dimension = 1:length(pls.res$TExPosition.Data$eigs),
+  Eigenvalue = pls.res$TExPosition.Data$eigs,
+  p_value = resPerm4PLSC$pEigenvalues
 )
+
+# Identify significant dimensions
+scree_df$Significance <- ifelse(scree_df$p_value < 0.05, "Significant", "Not Significant")
+significant_dims <- sum(scree_df$p_value < 0.05)
+
+# Create a scree plot using ggplot2
+scree_plot <- ggplot(scree_df, aes(x = Dimension, y = Eigenvalue)) +
+  geom_bar(stat = "identity", aes(fill = Significance), color = "black") +
+  geom_point(aes(color = Significance), size = 4) +
+  geom_line(aes(color = Significance, group = 1)) +
+  scale_fill_manual(values = c("Significant" = "red", "Not Significant" = "grey")) +
+  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "black")) +
+  labs(
+    title = paste("PLSC Scree Plot with", significant_dims, "Significant Dimensions"),
+    x = "Latent Dimension", y = "Eigenvalue (Inertia)"
+  ) +
+  theme_minimal() +
+  geom_text(aes(label = round(Eigenvalue, 2)), vjust = -1, size = 3) +
+  guides(fill = "none", color = "none")
+
+# Save the plot
+ggsave(file.path(fig_dir, "PLSC_Scree_Plot.png"), plot = scree_plot, width = 8, height = 6, dpi = 300)
+
+# Display the plot
+knitr::include_graphics(file.path(fig_dir, "PLSC_Scree_Plot.png"))
 ```
+```{r}
+# Re-run PLSC analysis (as provided in your script)
+pls.res <- tepPLS(
+  data1, data2,
+  DESIGN = design_matrix,
+  make_design_nominal = TRUE,
+  graphs = FALSE # Set graphs to FALSE to create custom plots
+)
+
+# Run permutation test with 10000 iterations
+resPerm4PLSC <- perm4PLSC(
+  data1,
+  data2,
+  permType = "byColumns",
+  nIter = 10000
+)
+
+# Print permutation test results
+print(resPerm4PLSC)
+```
+```{r}
+# Create a data frame for the scree plot
+scree_df <- data.frame(
+  Dimension = 1:length(pls.res$TExPosition.Data$eigs),
+  Eigenvalue = pls.res$TExPosition.Data$eigs,
+  p_value = resPerm4PLSC$pEigenvalues
+)
+
+# Identify significant dimensions (p < 0.05)
+scree_df$Significance <- ifelse(scree_df$p_value < 0.05, "Significant", "Not Significant")
+significant_dims <- sum(scree_df$p_value < 0.05)
+
+# Create a scree plot using ggplot2
+scree_plot <- ggplot(scree_df, aes(x = Dimension, y = Eigenvalue)) +
+  geom_bar(stat = "identity", aes(fill = Significance), color = "black") +
+  geom_point(aes(color = Significance), size = 4) +
+  geom_line(aes(color = Significance, group = 1)) +
+  scale_fill_manual(values = c("Significant" = "red", "Not Significant" = "grey")) +
+  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "black")) +
+  labs(
+    title = paste("PLSC Scree Plot with", significant_dims, "Significant Dimensions"),
+    x = "Latent Dimension",
+    y = "Eigenvalue (Inertia)"
+  ) +
+  theme_minimal(base_size = 12) +
+  geom_text(aes(label = round(Eigenvalue, 2)), vjust = -1, size = 4) +
+  guides(fill = "none", color = "none")
+
+# Save the plot using ggsave
+ggsave(file.path(fig_dir, "PLSC_Scree_Plot.png"), plot = scree_plot, width = 8, height = 6, dpi = 300)
+# Display the plot in the R Markdown output
+knitr::include_graphics(file.path(fig_dir, "PLSC_Scree_Plot.png"))
+```
+```{r}
+
+# Set the file path for saving the PNG
+png(file.path(fig_dir, "Perm_Histograms.png"), width = 2400, height = 800, res = 200)
+
+# Set up the plotting layout
+par(mfrow = c(1, 3))
+
+# Loop through the first 3 latent dimensions (or as many as you need)
+for (zeDim in 1:3) { # Changed to loop through dimensions 1, 2, and 3 for a better overview
+  eigs <- resPerm4PLSC$permEigenvalues[, zeDim]
+  obs <- as.numeric(resPerm4PLSC$fixedEigenvalues[zeDim])
+
+  prettyHist(
+    distribution = eigs,
+    observed = obs,
+    breaks = 30,
+    border = "white",
+    main = paste0("Permutation Test - Latent Dim ", zeDim),
+    xlab = paste0("Inertia of samples\nLatent dimension ", zeDim),
+    ylab = "Number of samples"
+  )
+}
+
+# Close the PNG device
+dev.off()
+# Display the plot in the R Markdown output
+knitr::include_graphics(file.path(fig_dir, "Perm_Histograms.png"))
+
+```
+```{r}
+# Get the latent variables and components
+lx <- pls.res$TExPosition.Data$lx
+ly <- pls.res$TExPosition.Data$ly
+fi <- pls.res$TExPosition.Data$fi
+fj <- pls.res$TExPosition.Data$fj
+ci <- pls.res$TExPosition.Data$ci
+cj <- pls.res$TExPosition.Data$cj
+
+# Combine factor scores and contributions for a single plot
+combined_factors <- rbind(fi, fj)
+combined_contributions <- rbind(ci, cj)
+
+# Save the Component plot (both sets of variables)
+png(file.path(fig_dir, "Component_Plot_All.png"), width = 1000, height = 1000, res = 300)
+prettyPlot(
+  combined_factors,
+  contributionCircles = TRUE,
+  contributions = combined_contributions,
+  xlab = "Component 1",
+  ylab = "Component 2",
+  main = "Combined Component Map",
+  dev.new = FALSE
+)
+dev.off()
+# Display the plot in the R Markdown output
+knitr::include_graphics(file.path(fig_dir, "Component_Plot_All.png"))
+
+```
+```{r}
+# Save the Component map for X set (RSI measures)
+png(file.path(fig_dir, "Component_Map_X_Set.png"), width = 1000, height = 1000, res = 300)
+prettyPlot(
+  fi,
+  contributionCircles = TRUE,
+  contributions = ci,
+  xlab = "Component 1",
+  ylab = "Component 2",
+  main = "RSI Component Map",
+  dev.new = FALSE
+)
+dev.off()
+
+# Save the Component map for Y set (Sociocultural measures)
+png(file.path(fig_dir, "Component_Map_Y_Set.png"), width = 1000, height = 1000, res = 300)
+prettyPlot(
+  fj,
+  contributionCircles = TRUE,
+  contributions = cj,
+  xlab = "Component 1",
+  ylab = "Component 2",
+  main = "Sociocultural Component Map",
+  dev.new = FALSE
+)
+dev.off()
+# Display the plots in the R Markdown output
+knitr::include_graphics(c(
+  file.path(fig_dir, "Component_Map_X_Set.png"),
+  file.path(fig_dir, "Component_Map_Y_Set.png")
+))
+
+```
+```{r}
+# Bootstrap analysis
+resBoot4PLSC <- Boot4PLSC(
+  data1,
+  data2,
+  nIter = 10000,
+  Fi = pls.res$TExPosition.Data$fi,
+  Fj = pls.res$TExPosition.Data$fj,
+  nf2keep = 5,
+  critical.value = 2.5
+)
+
+# Get bootstrap ratios
+BR.I <- resBoot4PLSC$bootRatios.i
+BR.J <- resBoot4PLSC$bootRatios.j
+
+# Determine the number of significant dimensions (e.g., p < 0.05)
+significant_dims_count <- sum(resPerm4PLSC$pEigenvalues < 0.05)
+print(paste("Number of significant dimensions:", significant_dims_count))
+
+# Plot Bootstrap ratios for the first significant dimension
+laDim <- 1 # Assuming the first dimension is significant. You can change this.
+
+# Plot for the X set (RSI measures)
+png(file.path(fig_dir, paste0("Bootstrap_Ratio_RSI_Dim", laDim, ".png")), width = 1800, height = 1200, res = 200)
+PrettyBarPlot2(
+  bootratio = BR.I[, laDim],
+  threshold = 2.5,
+  font.size = 4,
+  ylab = "Bootstrap ratios"
+) + ggtitle(paste0("Bootstrap Ratios - RSI Measures, Dimension ", laDim))
+dev.off()
+
+# Plot for the Y set (Sociocultural measures)
+png(file.path(fig_dir, paste0("Bootstrap_Ratio_Sociocult_Dim", laDim, ".png")), width = 1800, height = 1200, res = 200)
+PrettyBarPlot2(
+  bootratio = BR.J[, laDim],
+  threshold = 2.5,
+  font.size = 4,
+  ylab = "Bootstrap ratios"
+) + ggtitle(paste0("Bootstrap Ratios - Sociocultural Measures, Dimension ", laDim))
+dev.off()
+# Display the plots in the R Markdown output
+knitr::include_graphics(c(
+  file.path(fig_dir, paste0("Bootstrap_Ratio_RSI_Dim", laDim, ".png")),
+  file.path(fig_dir, paste0("Bootstrap_Ratio_Sociocult_Dim", laDim, ".png"))
+))
+
+```
+
+```{r}
+# Saving loadings and bootstrap ratios to CSV
+socio_loadings <- as.data.frame(pls.res$TExPosition.Data$pdq$q)
+rest_loadings <- as.data.frame(pls.res$TExPosition.Data$pdq$p)
+
+socio_res <- cbind.data.frame(socio_loadings, socio_bootstrap)
+rni_res <- cbind.data.frame(rest_loadings, rni_bootstrap)
+
+write.csv(socio_res, paste(out_dir, "rni-sociocult_Q-components.csv", sep = "/"), row.names = TRUE)
+write.csv(rni_res, paste(out_dir, "rni-brain_P-components.csv", sep = "/"), row.names = TRUE)
+write.csv(pls.res$TExPosition.Data$lx, paste(out_dir, "rniXrsfc_lx-base.csv", sep = "/"), row.names = TRUE)
+write.csv(pls.res$TExPosition.Data$ly, paste(out_dir, "rniXrsfc_ly-base.csv", sep = "/"), row.names = TRUE)
+
+```
+```{r}
+# Define a function to create and save a single score plot
+save_score_plot <- function(dimension, correlation, file_path) {
+  # Create a data frame for the latent variables of the specified dimension
+  latvar <- cbind(pls.res$TExPosition.Data$lx[, dimension], pls.res$TExPosition.Data$ly[, dimension])
+  colnames(latvar) <- c(
+    paste("Latent X dim", dimension),
+    paste("Latent Y dim", dimension)
+  )
+  
+  # Create the factor map
+  plot.lv <- createFactorMap(latvar, title = paste("Correlation = ", correlation))
+  plot_combined <- plot.lv$zeMap_background + plot.lv$zeMap_dots
+  
+  # Save the plot using ggsave for better quality and control
+  ggsave(file_path, plot = plot_combined, width = 6, height = 6, dpi = 300)
+}
+
+# --- Create and Save Individual Score Plots ---
+
+# Get correlations for the relevant dimensions
+cor_3 <- round(cor(pls.res$TExPosition.Data$lx[, 3], pls.res$TExPosition.Data$ly[, 3]), 3)
+cor_4 <- round(cor(pls.res$TExPosition.Data$lx[, 4], pls.res$TExPosition.Data$ly[, 4]), 3)
+cor_5 <- round(cor(pls.res$TExPosition.Data$lx[, 5], pls.res$TExPosition.Data$ly[, 5]), 3)
+
+# Save the score plot for dimension 3
+save_score_plot(3, cor_3, file.path(fig_dir, "Score_Plot_Dim3.png"))
+
+# Save the score plot for dimension 4
+save_score_plot(4, cor_4, file.path(fig_dir, "Score_Plot_Dim4.png"))
+
+# Save the score plot for dimension 5
+save_score_plot(5, cor_5, file.path(fig_dir, "Score_Plot_Dim5.png"))
+
+# --- Create a combined plot using grid.arrange (Optional) ---
+
+# Create the plots for each dimension
+score3 <- plotScore_fn(3, cor_3)
+score4 <- plotScore_fn(4, cor_4)
+score5 <- plotScore_fn(5, cor_5)
+
+# Arrange and save the combined plot
+combined_score_plot <- cowplot::plot_grid(score3, score4, score5, nrow = 1)
+ggsave(file.path(fig_dir, "Score_Plots_Combined.png"), plot = combined_score_plot, width = 18, height = 6, dpi = 300)
+
+# Display the combined plot in the R Markdown output
+knitr::include_graphics(file.path(fig_dir, "Score_Plots_Combined.png"))
+
+```
+
+
 
 tepPLS(DATA1, DATA2, center1 = TRUE, scale1 = "SS1", center2 = TRUE, scale2 = "SS1", DESIGN = NULL, make_design_nominal = TRUE, graphs = TRUE, k = 0)
 
@@ -340,299 +616,83 @@ k	: number of components to return.
 
 
 
-```{r echo=TRUE}
-# Extract design variable and ensure it's a factor (nominal)
-data.design <- as.factor(covar_df$site_id_l)
-
-# Convert to a matrix for PLSC input
-data.design.vec <- as.matrix(data.design)
-rownames(data.design.vec) <- covar_df$src_subject_id
-
-# Run PLSC analysis
-pls.res <- tepPLS(
-  data1,
-  data2,
-  DESIGN = data.design.vec,
-  make_design_nominal = TRUE,
-  graphs = FALSE
-)
-
-summary(pls.res)
-```
-
-### 3. Number of Dimensions
-
-The scree plot shows a weird pattern because the null hypothesis is that there is no correlation between the tables (Null = 0) 
-Hence eigenvalues greater than zero become significant. 
-
-The results of the permutation test gives us the eigenvalues.
-
-```{r echo=TRUE}
-# no.of eigenvalues
-nL <- min(ncol(data1), ncol(data2))
-
-# Applying permutation test to the input data for PLSC
-# should do 10000 iterations
-resPerm4PLSC <- perm4PLSC(data1, # First Data matrix
-  data2, # Second Data matrix
-  permType = "byColumns",
-  nIter = 10000 # How many iterations
-)
-print(resPerm4PLSC)
-
-```
-
-```{r}
-scree_df <- data.frame(row.names = colnames(socio_df))
-scree_df$eigens <- pls.res$TExPosition.Data$eigs
-scree_df$pEigens <- resPerm4PLSC$pEigenvalues
 
 
-write.csv(
-  scree_df,
-  file = paste0(fig_dir, "/rest-scree_values_", resPerm4PLSC$pOmnibus, "-components.csv")
-)
 
-# Set the file path for saving the plot
-png(file.path(fig_dir, "PLSC_Scree_Plot.png"), width = 1200, height = 800, res = 100)
 
-# Create the scree plot
-my.scree <- PlotScree(
-  ev = pls.res$TExPosition.Data$eigs,
-  p.ev = resPerm4PLSC$pEigenvalues,
-  title = "PLSC Scree Plot",
-  plotKaiser = TRUE,
-  col.ns = "black",
-  col.sig = "red"
-)
 
-# Calculate and round eigenvalues to 2 decimal places
-eig <- t(round(pls.res$TExPosition.Data$eigs, 2))
-peig <- t(resPerm4PLSC$pEigenvalues)
-# Create the names for the dimensions
-names <- paste0("dim", seq(1:20))
-# Create the table and print it explicitly
-eig_table <- kable(eig, col.names = names(pls.res$TExPosition.Data$eigs)) %>%
-  kable_styling()
-peig_table <- kable(peig, col.names = names(resPerm4PLSC$pEigenvalues)) %>%
-  kable_styling()
-# Explicitly print the table to the console
-print(eig_table) # Ensure the table is printed
-print(peig_table)
 
-# Close the PNG device
-dev.off()
-```
 
-```{r}
-# Set the file path for saving the PNG
-png(file.path(fig_dir, "Perm_Histograms.png"), width = 3000, height = 800, res = 100)
 
-# Set up the plotting layout for 3 plots in a row
-par(mfrow = c(1, 3)) # 1 row, 3 columns
 
-# Loop through the first 3 latent dimensions
-for (zeDim in 3:5) {
-  eigs <- resPerm4PLSC$permEigenvalues[, zeDim] # Permuted eigenvalues for the dimension
-  obs <- as.numeric(resPerm4PLSC$fixedEigenvalues[zeDim]) # Observed eigenvalue
 
-  # Generate the histogram for each dimension
-  prettyHist(
-    distribution = eigs,
-    observed = obs,
-    xlim = c(min(eigs), max(eigs)), # Automatically adjust xlim based on the data
-    breaks = 30,
-    border = "white",
-    main = paste0("Permutation Test - Latent Dim ", zeDim),
-    xlab = paste0("Inertia of samples\nLatent dimension ", zeDim),
-    ylab = "Number of samples",
-    counts = FALSE
-  )
-}
 
-# Close the PNG device to save the plot
-dev.off()
 
-```
 
-### 4*. Score Plots ??? line 501
-```{r}
-# function for correlations
-correlation_fn <- function(dimension) {
-  round(cor(pls.res$TExPosition.Data$lx[, dimension], pls.res$TExPosition.Data$ly[, dimension]), 3)
-}
-
-# use correlation function
-cor_3 <- correlation_fn(3)
-cor_4 <- correlation_fn(4)
-cor_5 <- correlation_fn(5)
-
-# function for plotting score plots
-plotScore_fn <- function(dimension, correlation) {
-  latvar <- cbind(pls.res$TExPosition.Data$lx[, dimension], pls.res$TExPosition.Data$ly[, dimension])
-  colnames(latvar) <- c(paste("Latent X dim", dimension), paste("Latent Y dim", dimension))
-  plot.lv <- createFactorMap(latvar, title = paste("correlation = ", correlation))
-  plot <- plot.lv$zeMap_background + plot.lv$zeMap_dots
-}
-
-# use function for first three dimensions
-score3 <- plotScore_fn(3, cor_3)
-score4 <- plotScore_fn(4, cor_4)
-score5 <- plotScore_fn(5, cor_5)
-
-# plot together
-# Set the file path for saving the plot
-png(file.path(fig_dir, "Score_Plots.png"), width = 1800, height = 600, res = 200)
-
-# Plot together using grid.arrange
-grid.arrange(score3, score4, score5, nrow = 1)
-
-# Close the PNG device to save the file
-dev.off()
-
-```
-
-```{r}
-factor <- rbind(pls.res$TExPosition.Data$fi, pls.res$TExPosition.Data$fj)
-contributions <- rbind(pls.res$TExPosition.Data$ci, pls.res$TExPosition.Data$cj)
-
-# Create and save the Component plot as a PNG
-png(file.path(fig_dir, "Component_Plot.png"), width = 1000, height = 1000, res = 100)
-prettyPlot(factor,
-  contributionCircles = TRUE,
-  contributions = contributions,
-  xlab = "Component 1",
-  ylab = "Component 2",
-  main = "Component plot",
-  dev.new = F
-)
-dev.off() # Close the PNG device for this plot
-
-# Create and save the Component map X set plot as a PNG
-png(file.path(fig_dir, "Component_Map_X_Set.png"), width = 1000, height = 1000, res = 100)
-prettyPlot(pls.res$TExPosition.Data$fi,
-  contributionCircles = TRUE,
-  contributions = pls.res$TExPosition.Data$ci,
-  xlab = "Component 1",
-  ylab = "Component 2",
-  main = "Component map X set",
-  dev.new = F
-)
-dev.off() # Close the PNG device for this plot
-
-# Create and save the Component map Y set plot as a PNG
-png(file.path(fig_dir, "Component_Map_Y_Set.png"), width = 1000, height = 1000, res = 100)
-prettyPlot(pls.res$TExPosition.Data$fj,
-  contributionCircles = TRUE,
-  contributions = pls.res$TExPosition.Data$cj,
-  xlab = "Component 1",
-  ylab = "Component 2",
-  main = "Component map Y set",
-  dev.new = F
-)
-dev.off() # Close the PNG device for this plot
-
-```
-
-```{r}
-
-# get sign of contributions / saliences
-signed.X <- pls.res$TExPosition.Data$ci * sign(pls.res$TExPosition.Data$fi)
-signed.Y <- pls.res$TExPosition.Data$cj * sign(pls.res$TExPosition.Data$fj)
-
-# function for plotting salience plots
-plotSalience_fn <- function(set, dimension) {
-  PrettyBarPlot2(
-    bootratio = round(100 * set[, dimension]),
-    threshold = 100 / nrow(set),
-    plotnames = TRUE,
-    main = paste("Variable Factor loadings Dim", dimension),
-    ylab = "Variable Factor loadings"
-  )
-}
- # Set the file path for saving the plot
- png(file.path(fig_dir, "Salience_XDim1.png"), width = 1800, height = 1200, res = 200)
-
- plotSalience_fn(signed.X, 1)
-
- # Close the PNG device to save the file
- dev.off()
-
-  png(file.path(fig_dir, "Salience_YDim1.png"), width = 1800, height = 1200, res = 200)
-
- plotSalience_fn(signed.Y, 1)
  
- dev.off()
-````
-
 ```{r}
-### 5. Obtaining Column factor scores
+# Define a single function to create and save the loadings map
+create_and_save_loadings_map <- function(data, title, file_name, eigs, tau, fig_dir, text_cex) {
+  # Generate loadings map
+  p.loadings <- createFactorMap(data,
+                                axis1 = 1,
+                                axis2 = 2,
+                                display.points = TRUE,
+                                display.labels = TRUE,
+                                title = title,
+                                pch = 20,
+                                cex = 3,
+                                text.cex = text_cex)
+  
+  # Add axis labels
+  label4map <- createxyLabels.gen(
+    x_axis = 1, y_axis = 2,
+    lambda = eigs,
+    tau = tau
+  )
+  
+  # Combine plot and labels
+  p.plot <- p.loadings$zeMap + label4map
+  
+  # Save the plot
+  ggsave(p.plot,
+         file = file.path(fig_dir, file_name),
+         width = 10, height = 10, units = "in", dpi = 600)
+}
 
-# {r echo=TRUE}
-### Column Factor scores of the 1st component of data1 representing RSI measures and data2 representing air pollutants
+# --- Use the function to plot both datasets ---
 
-# Fi:column factor scores for data1(RSI measures) or
-# Loadings of data1(RSI measures)
+# Extract factor scores from the PLSC results
 Fi <- pls.res$TExPosition.Data$fi
-
-# Fi:column factor scores for data2(Air pollutants exposure)
-# or Loadings of data2(air pollutants exposure)
 Fj <- pls.res$TExPosition.Data$fj
 
-# Generating loadings map of Fi
-p.loadings <- createFactorMap(Fi,
-  axis1 = 1,
-  axis2 = 2,
-  display.points = TRUE,
-  display.labels = TRUE,
+# Create and save the loadings map for the RSI measures (data1)
+create_and_save_loadings_map(
+  data = Fi,
   title = "Loadings of Columns RSI",
-  pch = 20,
-  cex = 3,
-  text.cex = 3,
+  file_name = "rni-brain_factors-components.png",
+  eigs = pls.res$TExPosition.Data$eigs,
+  tau = pls.res$TExPosition.Data$t,
+  fig_dir = fig_dir,
+  text_cex = 3
 )
 
-label4map <- createxyLabels.gen(
-  x_axis = 1, y_axis = 2,
-  lambda = pls.res$TExPosition.Data$eigs,
-  tau = pls.res$TExPosition.Data$t
-)
-
-p.plot <- p.loadings$zeMap + label4map
-p.plot
-ggsave(p.plot,
-  file = paste(fig_dir, "rni-brain_factors-components.png",
-    sep = "/"
-  ),
-  width = 10, height = 10, units = "in", dpi = 600
-)
-
-# Generating loadings map of Fj
-
-q.loadings <- createFactorMap(Fj,
-  axis1 = 1,
-  axis2 = 2,
-  display.points = TRUE,
-  display.labels = TRUE,
+# Create and save the loadings map for the sociocultural measures (data2)
+create_and_save_loadings_map(
+  data = Fj,
   title = "Loadings of Columns Sociocult",
-  pch = 20,
-  cex = 3,
-  text.cex = 4,
+  file_name = "rni-air_factors-components.png",
+  eigs = pls.res$TExPosition.Data$eigs,
+  tau = pls.res$TExPosition.Data$t,
+  fig_dir = fig_dir,
+  text_cex = 4
 )
 
-label4map <- createxyLabels.gen(
-  x_axis = 1, y_axis = 2,
-  lambda = pls.res$TExPosition.Data$eigs,
-  tau = pls.res$TExPosition.Data$t
-)
-
-q.plot <- q.loadings$zeMap + label4map
-q.plot
-ggsave(q.plot,
-  file = paste(fig_dir, "rni-air_factors-components.png",
-    sep = "/"
-  ),
-  width = 10, height = 10, units = "in", dpi = 600
-)
+# Display the plots in the R Markdown output
+knitr::include_graphics(c(
+  file.path(fig_dir, "rni-brain_factors-components.png"),
+  file.path(fig_dir, "rni-air_factors-components.png")
+))
 ```
 
 
@@ -645,50 +705,59 @@ ggsave(q.plot,
 
 # generating bar plots for loadings of RSI data table
 ```{r}
-'''P.data1 <- pls.res$TExPosition.Data$pdq$p
+# Define a function to create and save a bar plot for loadings
+create_and_save_loading_barplot <- function(data, title, file_name, fig_dir, horizontal = FALSE, color4ns = "gray75") {
+  plot <- PrettyBarPlot2(
+    bootratio = data[, 1],
+    threshold = 0,
+    ylim = NULL,
+    color4ns = color4ns,
+    plotnames = TRUE,
+    main = title,
+    ylab = "Loadings",
+    horizontal = horizontal
+  )
+  
+  ggsave(plot,
+         file = file.path(fig_dir, file_name),
+         width = 10, height = 10, units = "in", dpi = 600
+  )
+}
 
+# --- Use the function to plot both datasets ---
 
-plot_P.data1 <- PrettyBarPlot2(
-  bootratio = P.data1[, 1],
-  threshold = 0,
-  ylim = NULL,
-  color4ns = "gray75",
-  plotnames = TRUE,
-  main = "Loadings of RSI variables",
-  ylab = " P Loadings ",
+# Get the loadings for each data set
+P.data1 <- pls.res$TExPosition.Data$pdq$p
+Q.data2 <- pls.res$TExPosition.Data$pdq$q
+
+# Create and save the bar plot for RSI variables
+create_and_save_loading_barplot(
+  data = P.data1,
+  title = "Loadings of RSI variables",
+  file_name = "rni-brain_P-components.png",
+  fig_dir = fig_dir,
   horizontal = TRUE
 )
 
-plot_P.data1
-ggsave(plot_P.data1,
-  file = paste(proj_dir, figs_dir, "rni-brain_P-components.png",
-    sep = "/"
-  ),
-  width = 10, height = 10, units = "in", dpi = 600
+# Create and save the bar plot for sociocultural variables
+create_and_save_loading_barplot(
+  data = Q.data2,
+  title = "Loadings of sociocult variables",
+  file_name = "rni-air_Q-components.png",
+  fig_dir = fig_dir,
+  horizontal = FALSE,
+  color4ns = "white"
 )
 
-# generating bar plots for loadings of Air pollutants data table
-Q.data2 <- pls.res$TExPosition.Data$pdq$q
-
-
-plot_Q.data2 <- PrettyBarPlot2(
-  bootratio = Q.data2[, 1],
-  threshold = 0,
-  ylim = NULL,
-  color4ns = "white",
-  plotnames = TRUE,
-  main = "Loadings of sociocult variables",
-  ylab = " Q Loadings "
-)
-
-plot_Q.data2
-ggsave(plot_Q.data2,
-  file = paste(proj_dir, figs_dir, "rni-air_Q-components.png",
-    sep = "/"
-  ),
-  width = 10, height = 10, units = "in", dpi = 600
-)'''
+# Display the plots in the R Markdown output
+knitr::include_graphics(c(
+  file.path(fig_dir, "rni-brain_P-components.png"),
+  file.path(fig_dir, "rni-air_Q-components.png")
+))
 ```
+
+
+
 
 ```{r}
 # generating bar plots for loadings of Air pollutants data table
@@ -700,6 +769,7 @@ P.data1 <- pls.res$TExPosition.Data$pdq$p
 socio_loadings <- as.data.frame(Q.data2)
 rest_loadings <- as.data.frame(P.data1)
 ```
+
 ```{r}
 # Looking into what the resBootPLSC is giving us
 resBoot4PLSC <- Boot4PLSC(data1, # First Data matrix
@@ -767,7 +837,7 @@ print(laDim)
 
 
 
-```
+
 
 ```{r}
 # bootstrap ratios 
@@ -792,7 +862,13 @@ PrettyBarPlot2(BR.J[, laDim],
   # ylim = c(1.2*min(BR[,laDim]), 1.2*max(BR[,laDim]))
 ) + ggtitle(paste0("Component ", laDim), subtitle = "Table 2")
 dev.off() # Close the PNG device for BR.J
+# Display the plots in the R Markdown output
+knitr::include_graphics(c(
+  file.path(fig_dir, "Bootstrap_Ratio_BRI_Dim4.png"),
+  file.path(fig_dir, "Bootstrap_Ratio_BRJ_Dim4.png")
+))
 ```
+
 
 ### Percent Variance
 ```{r echo=TRUE}
