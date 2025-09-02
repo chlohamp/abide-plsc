@@ -16,18 +16,30 @@ import numpy as np
 #%%
 # Base path
 fmri_base_path = 'flux-data/'
+output_dir = 'output/'
+type_data = 'denoised'  #denoised or interpolated choose the different image you want to use
+N_networks = 7
+confounds_choice = [
+                "trans_x", "trans_y", "trans_z",
+                "rot_x", "rot_y", "rot_z",
+                "trans_x_derivative1", "trans_y_derivative1", "trans_z_derivative1",
+                "rot_x_derivative1", "rot_y_derivative1", "rot_z_derivative1",
+                "trans_x_power2", "trans_y_power2", "trans_z_power2",
+                "rot_x_power2", "rot_y_power2", "rot_z_power2",
+                "trans_x_derivative1_power2", "trans_y_derivative1_power2", "trans_z_derivative1_power2",
+                "rot_x_derivative1_power2", "rot_y_derivative1_power2", "rot_z_derivative1_power2"
+            ]
 
 # Get all participant directories starting with "sub-"
 participants = [d for d in os.listdir(fmri_base_path) if d.startswith('sub-') and os.path.isdir(os.path.join(fmri_base_path, d))]
 print(f"Found {len(participants)} participants: {participants}")
 
-output_dir = 'output/'
 os.makedirs(output_dir, exist_ok=True)
 
 #%%
 # Load Yeo 7-network atlas
 print("Loading Yeo 7-network atlas...")
-atlas_yeo = datasets.fetch_atlas_yeo_2011(n_networks=7, thickness='thick')
+atlas_yeo = datasets.fetch_atlas_yeo_2011(n_networks=N_networks, thickness='thick')
 atlas_img = nib.load(atlas_yeo.maps)  # Nifti image of atlas
 atlas_data = atlas_img.get_fdata().astype(int)
 
@@ -44,11 +56,9 @@ network_names = atlas_yeo.labels[1:]  # skip background label
 print(f"Atlas shape: {atlas_data.shape}")
 print(f"Atlas networks: {network_names}")
 
-type_data = 'denoised'  # or 'interpolated'
-
 #%%
 for participant_id in participants:
-    participant_path = os.path.join(fmri_base_path, 'derivatives', 'fmriprep-23.1.3', participant_id, 'func')
+    participant_path = os.path.join(fmri_base_path, 'derivatives', 'fmriprep-23.1.3', participant_id, 'func') #change this if you organise it in another way
 
 
     # Find fMRI file
@@ -80,16 +90,7 @@ for participant_id in participants:
             confounds_file = tsv_files[0]
 
             confounds = pd.read_csv(confounds_file, sep='\t')
-            confound_columns_24P = [
-                "trans_x", "trans_y", "trans_z",
-                "rot_x", "rot_y", "rot_z",
-                "trans_x_derivative1", "trans_y_derivative1", "trans_z_derivative1",
-                "rot_x_derivative1", "rot_y_derivative1", "rot_z_derivative1",
-                "trans_x_power2", "trans_y_power2", "trans_z_power2",
-                "rot_x_power2", "rot_y_power2", "rot_z_power2",
-                "trans_x_derivative1_power2", "trans_y_derivative1_power2", "trans_z_derivative1_power2",
-                "rot_x_derivative1_power2", "rot_y_derivative1_power2", "rot_z_derivative1_power2"
-            ]
+            confound_columns_24P = confounds_choice
             confound_vars = confounds[confound_columns_24P].fillna(0).values
 
             # Denoise
